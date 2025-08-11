@@ -192,9 +192,13 @@ occ_raw2 <- occ_raw %>%
 
 occ_raw2 = occ_raw2 %>% filter(n_points >= 10)
 
+## Exclude geometry from occ_db_filt to save the file nicely
+
+occ_tbl <- sf::st_drop_geometry(occ_db_filt)
+
 # save
 write.csv(occ_raw2, "~/OneDrive - KU Leuven/UG_DRC_CHAD/Data/occurrence_with_clusters_UG.csv", row.names = FALSE)
-write.csv(occ_db_filt, "~/OneDrive - KU Leuven/UG_DRC_CHAD/Data/events_points_clustered_UG.csv") ## This is to also have the sampling events (needed for the next step)
+write.csv(occ_tbl, "~/OneDrive - KU Leuven/UG_DRC_CHAD/Data/events_points_clustered_UG.csv") ## This is to also have the sampling events (needed for the next step)
 st_write(occ_db_filt, "~/OneDrive - KU Leuven/UG_DRC_CHAD/Data/events_points_clustered_UG.gpkg", layer = "points", delete_layer = TRUE)
 
 ## But we need centroids to extract Temp / Precipitation (Centroids of the new created circles - This is just for the big variables)
