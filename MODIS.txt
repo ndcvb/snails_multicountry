@@ -1,0 +1,53 @@
+// Be sure of importing the asset 'dbscan' as WCS (centroids)
+Map.addLayer(WCS);
+
+var dataset = ee.ImageCollection('MODIS/061/MOD11A1')
+  .filter(ee.Filter.date('2020-02-01', '2023-04-30'));
+
+var lst  = dataset.select('LST_Day_1km');
+var qcd  = dataset.select('QC_Day');      // quality band
+
+// ---- Mask to good quality (QC_Day == 0) ----
+function maskGood(img) {
+  var good = img.select('QC_Day').eq(0);
+  return img.updateMask(good);
+}
+var dsMasked = ee.ImageCollection(ee.Join.saveFirst('qc').apply({
+  primary: lst,
+  secondary: qcd,
+  condition: ee.Filter.equals({leftField: 'system:index', rightField: 'system:index'})
+})).map(function(img){
+  var qc = ee.Image(img.get('qc'));
+  return img.updateMask(qc.eq(0));
+});
+
+// ---- Apply scale (0.02) and convert to °C (Already, so we skip this later in r) ----
+var lstC = dsMasked.map(function(img){
+  return img.multiply(0.02).subtract(273.15).copyProperties(img, img.propertyNames());
+});
+
+// Visual (optional)
+Map.addLayer(lstC.first(), {min: 15, max: 45, palette: ['040274','30c8e2','3be285','ffb613','ff0000']}, 'LST °C');
+
+// ---- Stack to bands & sample at native scale ----
+var proj  = lstC.first().projection();
+var scale = proj.nominalScale();           // ~1000 m (MODIS sinusoidal)
+var stacked = lstC.toBands().reproject({crs: proj, scale: scale});
+
+// Keep your ID (use site_id_renum if present; fall back to Watercontactsite)
+var WCS_withID = WCS.map(function(f){
+  var sid = ee.Algorithms.If(f.propertyNames().contains('site_id_renum'),
+                             f.get('site_id_renum'),
+                             f.get('Watercontactsite'));
+  return f.set('site_id_renum', sid);
+});
+
+// For points, first() == pixel value (faster than mean)
+var means = stacked.reduceRegions({
+  collection: WCS_withID,
+  reducer: ee.Reducer.first(),
+  scale: scale
+});
+
+// Export
+Export.table.toDrive(means, 'MODIS_LST', 'px', 'MODIS_LST_Day', 'CSV');

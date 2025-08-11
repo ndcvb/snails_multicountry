@@ -1,0 +1,30 @@
+
+//Be sure of importing the asset 'dbscan' from the folder Data/Uganda/
+
+Map.addLayer(WCS);
+var dataset = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+                   .filter(ee.Filter.date('2020-02-01', '2023-04-30'));// Verify dates
+var precipitation = dataset.select('precipitation');
+var precipitationVis = {
+  min: 1,
+  max: 17,
+  palette: ['001137', '0aab1e', 'e7eb05', 'ff4a2d', 'e90000'],
+};
+Map.setCenter(17.93, 7.71, 2);
+Map.addLayer(precipitation, precipitationVis, 'Precipitation');
+
+// scale of CHIRPS 
+var projC  = precipitation.first().projection();
+var scaleC = projC.nominalScale();   // ~5500 m
+
+var stacked = precipitation.toBands();
+var means = stacked.reduceRegions({
+  collection: WCS.map(function(feature) {
+    var watercontactsiteValue = feature.get('site_id_renum');  // Get the site_id_renum value
+    return feature.set('site_id_renum', watercontactsiteValue); // Add the site_id_renum property
+  }),
+  reducer: ee.Reducer.mean(),
+  scale: scaleC // Adjust the scale as needed
+})
+Export.table.toDrive(means, 'test', 'px', 'test', 'CSV');
+
